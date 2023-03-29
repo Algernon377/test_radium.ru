@@ -1,4 +1,6 @@
-import requests
+import shutil
+import httpx
+import aiofiles
 
 import time
 import re
@@ -14,17 +16,17 @@ async def load_header_async(link: str, directory: str):
     takes everything in the <head> tag from the received response and
     saves it in the directory (directory=str)
     """
-    req = await asyncio.get_event_loop().run_in_executor(None, requests.get, link)
-    if not req.status_code:
-        print(f'Ошибка сервера. ошибка:{req.status_code}')
-        raise ValueError('Сервер не отвечает, проверьте правильность введенного url')
-    data_header = re.search(r'(?<=<head>)(.*)(?=</head>)', req.text, re.DOTALL)[0]
-    with open(f'{directory}/file{time.time() % 1}.json', 'w', encoding='utf-8') as json_file:
-        json.dump(data_header, json_file)
-    req.close()
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f'{link}')
+        if not resp.status_code:
+            print(f'Ошибка сервера. ошибка:{resp.status_code}')
+            raise ValueError('Сервер не отвечает, проверьте правильность введенного url')
+        data_header = re.search(r'(?<=<head>)(.*)(?=</head>)', resp.text, re.DOTALL)[0]
+        async with aiofiles.open(f'{directory}/file{time.time() % 1}.json', 'w', encoding='utf-8') as json_file:
+            await json_file.write(json.dumps(data_header))
 
 
-async def run_async(num_of_req: int, link: str, directory: str):
+async def run_async(link: str, directory: str, num_of_req: int):
     """
     Makes a certain number of requests (num_of_req=int)
     to the address (link=str) and
@@ -48,11 +50,16 @@ def make_hash(directory: str):
     return hash_list
 
 
+def clean_header_dir():
+    shutil.rmtree(f"{DIRECTORY}")
+    os.mkdir(f'{DIRECTORY}')
+
+
 link = 'https://gitea.radium.group/radium/project-configuration'
-directory = os.path.join(os.getcwd(), "save_headers")
+DIRECTORY = os.path.join(os.getcwd(), "save_headers")
 num_of_req = 3
 
 if __name__ == '__main__':
-    asyncio.run(run_async(num_of_req, link, directory))
-    all_hash = make_hash(directory)
-    print(all_hash)
+    asyncio.run(run_async(link, DIRECTORY, num_of_req))
+    # all_hash = make_hash(directory)
+    # print(all_hash)
